@@ -1,0 +1,5 @@
+#ifndef VOLTAGE_H
+#define VOLTAGE_H
+#include <Arduino.h>
+void measureVoltage();
+#endif

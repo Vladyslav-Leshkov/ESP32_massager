@@ -1,0 +1,273 @@
+#include <Arduino.h>
+#include <BluetoothSerial.h>
+
+BluetoothSerial SerialBT;
+
+// Визначення пінів
+#define POWER_BUTTON_PIN 23 // GPIO23 -> блокування кнопки включення (команди ON/OFF)
+#define BUTTON_PIN_1 27     // GPIO27 -> команда "7"
+#define BUTTON_PIN_2 32     // GPIO32 -> команда "6"
+#define BUTTON_PIN_3 33     // GPIO33 -> команда "5"
+#define BUTTON_PIN_4 25     // GPIO25 -> команда "4"
+#define BUTTON_PIN_5 26     // GPIO26 -> команда "3"
+#define BUTTON_PIN_6 13     // GPIO13 -> команда "2"
+#define BUTTON_PIN_7 14     // GPIO14 -> команда "1"
+#define SENSE_PIN 36        // GPIO36 -> ADC1_CH0 для вимірювання напруги
+
+// Масив пінів для імітації натискання кнопок
+const int buttonPins[] = {BUTTON_PIN_1, BUTTON_PIN_2, BUTTON_PIN_3, BUTTON_PIN_4, BUTTON_PIN_5, BUTTON_PIN_6, BUTTON_PIN_7};
+const int numButtons = 7;
+
+// Стани кнопок
+volatile int buttonModes[] = {1, 1, 1, 0, 0, 0, 1}; // 1,2,3,7 - Mode:1; 5,6 - OFF; 4 - SLEEP
+volatile bool deviceOn = false;
+
+// Для періодичного виведення напруги
+unsigned long lastVoltageCheck = 0;
+const unsigned long voltageCheckInterval = 3000; // 3 секунди
+
+// Прототипи функцій
+void updateButtonMode(int buttonIndex);
+void sendButtonStatus(int buttonIndex, bool forceOutput = false);
+void resetToDefaultModes();
+
+void updateButtonMode(int buttonIndex)
+{
+    if (!deviceOn && buttonIndex != 3) // Ігноруємо натискання кнопок (крім 4) у Device SLEEP
+        return;
+
+    switch (buttonIndex)
+    {
+    case 0: // Button 1
+    case 2: // Button 3
+    case 6: // Button 7
+        buttonModes[buttonIndex] = (buttonModes[buttonIndex] % 3) + 1;
+        break;
+    case 1:                                        // Button 2
+        buttonModes[1] = (buttonModes[1] % 3) + 1; // Цикли між 1,2,3 (0 встановлюється кнопками 5,6)
+        buttonModes[4] = 0;                        // Reset Button 5
+        buttonModes[5] = 0;                        // Reset Button 6
+        break;
+    case 4: // Button 5
+        if (buttonModes[4] == 0)
+        {
+            buttonModes[4] = 1;
+            buttonModes[5] = 0; // Turn off Button 6
+            buttonModes[1] = 0; // Set Button 2 to Mode 0
+        }
+        else
+        {
+            buttonModes[4] = 0;
+        }
+        break;
+    case 5: // Button 6
+        if (buttonModes[5] == 0)
+        {
+            buttonModes[5] = 1;
+            buttonModes[4] = 0; // Turn off Button 5
+            buttonModes[1] = 0; // Set Button 2 to Mode 0
+        }
+        else
+        {
+            buttonModes[5] = 0;
+        }
+        break;
+    case 3: // Button 4 (Power)
+        buttonModes[3] = !buttonModes[3];
+        deviceOn = buttonModes[3];
+        if (!deviceOn)
+        {
+            resetToDefaultModes(); // Скидаємо до дефолтних значень у Device SLEEP
+        }
+        break;
+    }
+    sendButtonStatus(buttonIndex);
+}
+
+void sendButtonStatus(int buttonIndex, bool forceOutput)
+{
+    String status;
+    if (buttonIndex == 3 || forceOutput) // Завжди виводимо для кнопки 4 або при примусовому виведенні
+    {
+        status = (buttonIndex == 3) ? "Button 4 Mode: " + String(buttonModes[3] ? "Device ON" : "Device SLEEP")
+                                    : "Button " + String(buttonIndex + 1) + " Mode: " +
+                                          (buttonIndex == 4 || buttonIndex == 5 ? String(buttonModes[buttonIndex] ? "ON" : "OFF") : String(buttonModes[buttonIndex]));
+        Serial.println(status);
+        SerialBT.println(status);
+    }
+    else if (deviceOn) // Виводимо стани інших кнопок лише в Device ON
+    {
+        if (buttonIndex == 4 || buttonIndex == 5)
+        {
+            status = "Button " + String(buttonIndex + 1) + " Mode: " + String(buttonModes[buttonIndex] ? "ON" : "OFF");
+        }
+        else
+        {
+            status = "Button " + String(buttonIndex + 1) + " Mode: " + String(buttonModes[buttonIndex]);
+        }
+        Serial.println(status);
+        SerialBT.println(status);
+    }
+}
+
+void resetToDefaultModes()
+{
+    buttonModes[0] = 1; // Button 1 -> Mode 1
+    buttonModes[1] = 1; // Button 2 -> Mode 1
+    buttonModes[2] = 1; // Button 3 -> Mode 1
+    buttonModes[3] = 0; // Button 4 -> Device SLEEP
+    buttonModes[4] = 0; // Button 5 -> OFF
+    buttonModes[5] = 0; // Button 6 -> OFF
+    buttonModes[6] = 1; // Button 7 -> Mode 1
+    deviceOn = false;
+
+    // Виводимо всі стани в Serial Monitor і через Bluetooth
+    Serial.println("Reset to default modes:");
+    SerialBT.println("Reset to default modes:");
+    for (int i = 0; i < numButtons; i++)
+    {
+        sendButtonStatus(i, true); // Примусово виводимо всі стани
+    }
+}
+
+void activateButton(int pin, int buttonIndex)
+{
+    digitalWrite(pin, HIGH);
+    if (deviceOn) // Виводимо повідомлення лише в Device ON (крім кнопки 4)
+    {
+        Serial.println("Button on GPIO " + String(pin) + " activated (HIGH)");
+        SerialBT.println("Button on GPIO " + String(pin) + " activated (HIGH)");
+    }
+    delay(100);
+    digitalWrite(pin, LOW);
+    if (deviceOn) // Виводимо повідомлення лише в Device ON (крім кнопки 4)
+    {
+        Serial.println("Button on GPIO " + String(pin) + " deactivated (LOW)");
+        SerialBT.println("Button on GPIO " + String(pin) + " deactivated (LOW)");
+    }
+    updateButtonMode(buttonIndex);
+}
+
+void measureVoltage()
+{
+    long sum = 0;
+    for (int i = 0; i < 50; i++)
+    {
+        sum += analogRead(SENSE_PIN);
+        delay(1);
+    }
+    float voltage = (sum / 50.0) * (3.3 / 4095.0);
+
+    // Виведення напруги раз на 3 секунди завжди
+    unsigned long currentTime = millis();
+    if (currentTime - lastVoltageCheck >= voltageCheckInterval)
+    {
+        Serial.print("GPIO36 voltage: ");
+        Serial.println(voltage, 2);
+        if (deviceOn) // Виводимо через Bluetooth лише в Device ON
+        {
+            SerialBT.print("GPIO36 voltage: ");
+            SerialBT.println(voltage, 2);
+        }
+        lastVoltageCheck = currentTime;
+    }
+
+    // Оновлення Device Mode
+    bool newDeviceOn = (voltage >= 0.09 && voltage <= 1.85);
+    if (newDeviceOn != deviceOn)
+    {
+        buttonModes[3] = newDeviceOn;
+        deviceOn = newDeviceOn;
+        if (!deviceOn)
+        {
+            resetToDefaultModes(); // Скидаємо до дефолтних значень у Device SLEEP
+        }
+        else
+        {
+            sendButtonStatus(3, true); // Виводимо зміну Device Mode
+        }
+    }
+}
+
+void processCommand(String command)
+{
+    command.replace("\r", "");
+    command.trim();
+    Serial.println("Trimmed command: [" + command + "]");
+    if (deviceOn) // Виводимо через Bluetooth лише в Device ON
+    {
+        SerialBT.println("Trimmed command: [" + command + "]");
+    }
+
+    if (command == "ON")
+    {
+        digitalWrite(POWER_BUTTON_PIN, HIGH);
+        Serial.println("Power button enabled (HIGH)");
+        if (deviceOn) // Виводимо через Bluetooth лише в Device ON
+        {
+            SerialBT.println("Power button enabled (HIGH)");
+        }
+    }
+    else if (command == "OFF")
+    {
+        digitalWrite(POWER_BUTTON_PIN, LOW);
+        Serial.println("Power button disabled (LOW)");
+        if (deviceOn) // Виводимо через Bluetooth лише в Device ON
+        {
+            SerialBT.println("Power button disabled (LOW)");
+        }
+    }
+    else if (command >= "1" && command <= "7")
+    {
+        int buttonIndex = command.toInt() - 1;
+        activateButton(buttonPins[buttonIndex], buttonIndex);
+    }
+    else
+    {
+        Serial.println("Unknown command. Send 'ON'/'OFF' for power button, '1' to '7' for other buttons.");
+        if (deviceOn) // Виводимо через Bluetooth лише в Device ON
+        {
+            SerialBT.println("Unknown command. Send 'ON'/'OFF' for power button, '1' to '7' for other buttons.");
+        }
+    }
+}
+
+void setup()
+{
+    Serial.begin(115200);
+    delay(100);
+    Serial.println("ESP32 started. Send 'ON'/'OFF' for power button, '1' to '7' to activate buttons (CRLF required).");
+
+    SerialBT.begin("ESP32_Massager");
+    Serial.println("Bluetooth started. Pair with ESP32_Massager");
+
+    // Ініціалізація пінів
+    for (int i = 0; i < numButtons; i++)
+    {
+        pinMode(buttonPins[i], OUTPUT); // Для імітації натискань
+        digitalWrite(buttonPins[i], LOW);
+    }
+
+    pinMode(POWER_BUTTON_PIN, OUTPUT);
+    digitalWrite(POWER_BUTTON_PIN, LOW);
+    pinMode(SENSE_PIN, INPUT);
+}
+
+void loop()
+{
+    measureVoltage();
+
+    if (Serial.available())
+    {
+        String command = Serial.readStringUntil('\n');
+        processCommand(command);
+    }
+
+    if (SerialBT.available())
+    {
+        String command = SerialBT.readStringUntil('\n');
+        processCommand(command);
+    }
+
+    delay(100);
+}

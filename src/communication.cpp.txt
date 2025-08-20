@@ -1,0 +1,13 @@
+#include "communication.h"
+#include "board.h"
+#include "buttons.h"
+
+void printStatus(String status)
+{
+    Serial.println(status);
+    if (deviceOn && voltage_charc)
+    {
+        voltage_charc->setValue(status.c_str());
+        voltage_charc->notify();
+    }
+}

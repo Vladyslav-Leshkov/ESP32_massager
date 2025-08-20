@@ -1,0 +1,43 @@
+#include "voltage.h"
+#include "board.h"
+#include "buttons.h"
+#include "communication.h"
+#include <BLECharacteristic.h>
+
+extern BLECharacteristic *voltage_charc;
+extern volatile bool deviceOn; // Виправлено: додано volatile
+static unsigned long lastVoltageCheck = 0;
+
+void measureVoltage()
+{
+    long sum = 0;
+    for (int i = 0; i < 50; i++)
+    {
+        sum += analogRead(SENSE_PIN);
+        delay(1);
+    }
+    float voltage = (sum / 50.0) * (3.3 / 4095.0);
+
+    unsigned long currentTime = millis();
+    if (currentTime - lastVoltageCheck >= voltageCheckInterval)
+    {
+        String status = "GPIO36 voltage: " + String(voltage, 2);
+        printStatus(status);
+        lastVoltageCheck = currentTime;
+    }
+
+    bool newDeviceOn = (voltage >= 0.09 && voltage <= 1.85);
+    if (newDeviceOn != deviceOn)
+    {
+        buttonModes[3] = newDeviceOn;
+        deviceOn = newDeviceOn;
+        if (!deviceOn)
+        {
+            resetToDefaultModes();
+        }
+        else
+        {
+            sendButtonStatus(3, true);
+        }
+    }
+}

@@ -3,7 +3,6 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-#include <Wire.h>
 #include <EEPROM.h>
 #include <soc/rtc.h>
 #include <esp_system.h>
@@ -12,9 +11,6 @@
 #include "myWebServer.h"
 #include "ota_ap.h"
 #include "buttons_and_modes.h"
-
-// // Changeable UUID for QR Code
-// String serviceUUID = "3aa82ff0-300d-49ed-8b59-b9a674f843f3"; // "9ba06fee-3aec-4deb-882e-1888fc26ecc4"; // "3ea3d02c-fe45-423a-a09f-43895c7c7c5b"; // "6bc58753-dc17-4c09-9658-68442283ff48";
 
 long bootCount = 0;
 
@@ -103,6 +99,16 @@ void PressButton(int pin, int duration_ms)
     // Serial.printf("[BUTTON] Pressed pin %d for %d ms\n", pin, duration_ms);
 }
 
+int getButtonPin(int btn_id)
+{
+    const int pins[] = {-1, BUTTON_PIN_1, BUTTON_PIN_2, BUTTON_PIN_3, POWER_BUTTON_PIN_4, BUTTON_PIN_5, BUTTON_PIN_6, BUTTON_PIN_7};
+
+    if (btn_id >= 1 && btn_id <= 7)
+    {
+        return pins[btn_id];
+    }
+    return -1; // Incorrect btn_id
+}
 class RestProcessCallbacks : public BLECharacteristicCallbacks
 {
     void onWrite(BLECharacteristic *charc)
@@ -123,27 +129,26 @@ class RestProcessCallbacks : public BLECharacteristicCallbacks
                 {
                     if (!run_permit && !IsMotorRun())
                     {
-                        digitalWrite(POWER_BUTTON_PIN, HIGH); // HIGE = unlock
-                        Serial.println("POWER_BUTTON_PIN, HIGH");
+                        digitalWrite(LOCK_BUTTON_PIN, HIGH); // HIGE = unlock
+                        Serial.println("LOCK_BUTTON_PIN, HIGH");
                         delay(100);
-                        PressButton(BUTTON_START_PIN_4, 100);
+                        PressButton(POWER_BUTTON_PIN_4, 100);
                         Serial.println("PIN_4, 100");
                     }
 
                     run_permit = true;
                     size_t length = (delimiter_index == last_delimiter) ? message.length() : last_delimiter - delimiter_index - 1;
-                    // Увага! Костиль для тестування!
-                    // Зміна: множимо отриманий час на 2, щоб подвоїти інтервал для KEEPALIVE (наприклад, 60 секунд стають 120 секундами)
                     time_bet_keep = (unsigned long)(message.substring(delimiter_index + 1, delimiter_index + length + 1).toInt() * 1000 * 2);
                     last_keep_time = millis();
                     session_id = _session_id;
-                    // digitalWrite(BoardLedPin, HIGH);
                     command_charc->setValue("0");
+                    command_charc->notify();
                     Serial.println("[BLE] Sent to client: 0 (RUN success)");
                 }
                 else
                 {
                     command_charc->setValue("1");
+                    command_charc->notify();
                     Serial.println("[BLE] Sent to client: 1 (RUN invalid format)");
                 }
                 command = "";
@@ -153,16 +158,16 @@ class RestProcessCallbacks : public BLECharacteristicCallbacks
                 if (run_permit && IsMotorRun())
                 {
                     Serial.println("Pressing START button to stop motor...");
-                    PressButton(BUTTON_START_PIN_4, 100);
+                    PressButton(POWER_BUTTON_PIN_4, 100);
                     delay(100);
                     Serial.println("Sending POWER OFF...");
-                    digitalWrite(POWER_BUTTON_PIN, LOW);
+                    digitalWrite(LOCK_BUTTON_PIN, LOW);
                 }
 
                 run_permit = false;
                 session_id = 0;
-                // digitalWrite(BoardLedPin, LOW);
                 command_charc->setValue("0");
+                command_charc->notify();
                 Serial.println("[BLE] Sent to client: 0 (STOP success)");
                 command = "";
             }
@@ -170,6 +175,7 @@ class RestProcessCallbacks : public BLECharacteristicCallbacks
             {
                 last_keep_time = millis();
                 command_charc->setValue("0");
+                command_charc->notify();
                 Serial.println("[BLE] Sent to client: 0 (KEEPALIVE success)");
             }
             else if (command == "STATUS")
@@ -179,12 +185,14 @@ class RestProcessCallbacks : public BLECharacteristicCallbacks
                 char session_state_str[2];
                 snprintf(session_state_str, sizeof(session_state_str), "%d", session_state);
                 command_charc->setValue(session_state_str);
+                command_charc->notify();
                 Serial.printf("[BLE] Sent to client: %s (STATUS response)\n", session_state_str);
             }
             else if (command == "UPDATE")
             {
-                WebServerSetup();
-                WebServerLoop();
+                command_charc->setValue("0");
+                command_charc->notify();
+                Serial.println("[BLE] Sent to client: 0 (UPDATE success)");
             }
             else if (command == "PAUSE")
             {
@@ -198,13 +206,12 @@ class RestProcessCallbacks : public BLECharacteristicCallbacks
                         if (!session_pause)
                         {
                             Serial.println("[PAUSE] Activating pause");
-                            PressButton(BUTTON_START_PIN_4, 100);
+                            PressButton(POWER_BUTTON_PIN_4, 100);
                             delay(100);
 
-                            // Checking if the motor is turned off
                             if (IsMotorRun() == 0)
                             {
-                                digitalWrite(POWER_BUTTON_PIN, LOW); // LOW = lock
+                                digitalWrite(LOCK_BUTTON_PIN, LOW); // LOW = lock
                                 Serial.println("Blocked");
                             }
                         }
@@ -215,10 +222,10 @@ class RestProcessCallbacks : public BLECharacteristicCallbacks
                     {
                         if (session_pause)
                         {
-                            digitalWrite(POWER_BUTTON_PIN, HIGH);
-                            Serial.println("POWER_BUTTON_PIN, HIGH");
+                            digitalWrite(LOCK_BUTTON_PIN, HIGH);
+                            Serial.println("LOCK_BUTTON_PIN, HIGH");
                             delay(50);
-                            PressButton(BUTTON_START_PIN_4, 100);
+                            PressButton(POWER_BUTTON_PIN_4, 100);
                             Serial.println("[PAUSE] Resumed from pause");
                         }
                         last_keep_time = millis();
@@ -227,11 +234,13 @@ class RestProcessCallbacks : public BLECharacteristicCallbacks
                         Serial.println("[PAUSE] run_permit set to true");
                     }
                     command_charc->setValue("0");
+                    command_charc->notify();
                     Serial.println("[BLE] Sent to client: 0 (PAUSE success)");
                 }
                 else
                 {
                     command_charc->setValue("1");
+                    command_charc->notify();
                     Serial.println("[BLE] Sent to client: 1 (PAUSE invalid format)");
                 }
                 command = "";
@@ -244,17 +253,58 @@ class RestProcessCallbacks : public BLECharacteristicCallbacks
                     logs_str += String(EEPROM.read(i)) + String(" ");
                 }
                 command_charc->setValue(logs_str.c_str());
+                command_charc->notify();
                 Serial.printf("[BLE] Sent to client: %s (LOGS response)\n", logs_str.c_str());
+            }
+            else if (command == "COMMAND")
+            {
+                if (delimiter_index != -1 && last_delimiter != -1 && last_delimiter > delimiter_index)
+                {
+                    int btn_id = message.substring(last_delimiter + 1).toInt();
+                    int pin = getButtonPin(btn_id);
+
+                    if (pin != -1 && run_permit && IsMotorRun() == 1)
+                    {
+                        PressButton(pin, 100);
+                        command_charc->setValue("0");
+                        Serial.printf("[BLE] Button %d pressed on pin %d\n", btn_id, pin);
+                    }
+                    else
+                    {
+                        if (run_permit && IsMotorRun())
+                        {
+                            Serial.println("Pressing START button to stop motor...");
+                            PressButton(POWER_BUTTON_PIN_4, 100);
+                            delay(100);
+                            Serial.println("Sending POWER OFF...");
+                            digitalWrite(LOCK_BUTTON_PIN, LOW);
+                        }
+                        run_permit = false;
+                        session_id = 0;
+                        command_charc->setValue("1");
+                        Serial.println("[BLE] Sent to client: 1 (COMMAND failed: invalid btn_id or conditions not met)");
+                    }
+                    command_charc->notify();
+                }
+                else
+                {
+                    command_charc->setValue("1");
+                    command_charc->notify();
+                    Serial.println("[BLE] Sent to client: 1 (COMMAND invalid format)");
+                }
+                command = "";
             }
             else
             {
                 command_charc->setValue("2");
+                command_charc->notify();
                 Serial.println("[BLE] Sent to client: 2 (Unknown command)");
             }
         }
         else
         {
             command_charc->setValue("1");
+            command_charc->notify();
             Serial.println("[BLE] Sent to client: 1 (Invalid session ID)");
         }
     }
@@ -263,19 +313,19 @@ class RestProcessCallbacks : public BLECharacteristicCallbacks
 void GPIO_Init()
 {
     // pinMode(BoardLedPin, OUTPUT);
-    pinMode(MotorControlPin, INPUT);
     // pinMode(PowerRelayPin, OUTPUT);
     // digitalWrite(PowerRelayPin, HIGH);
-    pinMode(POWER_BUTTON_PIN, OUTPUT);
-    digitalWrite(POWER_BUTTON_PIN, LOW);
+    pinMode(MotorControlPin, INPUT);
+    pinMode(LOCK_BUTTON_PIN, OUTPUT);
+    digitalWrite(LOCK_BUTTON_PIN, LOW);
     pinMode(BUTTON_PIN_1, OUTPUT);
     digitalWrite(BUTTON_PIN_1, LOW);
     pinMode(BUTTON_PIN_2, OUTPUT);
     digitalWrite(BUTTON_PIN_2, LOW);
     pinMode(BUTTON_PIN_3, OUTPUT);
     digitalWrite(BUTTON_PIN_3, LOW);
-    pinMode(BUTTON_START_PIN_4, OUTPUT);
-    digitalWrite(BUTTON_START_PIN_4, LOW);
+    pinMode(POWER_BUTTON_PIN_4, OUTPUT);
+    digitalWrite(POWER_BUTTON_PIN_4, LOW);
     pinMode(BUTTON_PIN_5, OUTPUT);
     digitalWrite(BUTTON_PIN_5, LOW);
     pinMode(BUTTON_PIN_6, OUTPUT);
@@ -414,9 +464,9 @@ void loop()
     else if (1 == needPress)
         needPress = millis();
     else if (100 > (millis() - needPress))
-        digitalWrite(BUTTON_START_PIN_4, HIGH);
+        digitalWrite(POWER_BUTTON_PIN_4, HIGH);
     else if (200 > (millis() - needPress))
-        digitalWrite(BUTTON_START_PIN_4, LOW);
+        digitalWrite(POWER_BUTTON_PIN_4, LOW);
     else
     {
         needPress = 0;
@@ -457,10 +507,10 @@ void CheckPauseTimeProcess()
         {
             session_pause = false;
             run_permit = true;
-            digitalWrite(POWER_BUTTON_PIN, HIGH);
-            Serial.println("POWER_BUTTON_PIN, HIGH");
+            digitalWrite(LOCK_BUTTON_PIN, HIGH);
+            Serial.println("LOCK_BUTTON_PIN, HIGH");
             delay(50);
-            PressButton(BUTTON_START_PIN_4, 100);
+            PressButton(POWER_BUTTON_PIN_4, 100);
             Serial.println("[PAUSE] Resumed from pause, run_permit set to true");
         }
     }
@@ -472,14 +522,14 @@ void SwitchOff()
     if (0 == needPress)
     {
         session_id = 0;
-        PressButton(BUTTON_START_PIN_4, 100);
+        PressButton(POWER_BUTTON_PIN_4, 100);
         Serial.println("SwitchOff = POWER OFF");
         delay(100);
 
         // Checking if the motor is turned off
         if (IsMotorRun() == 0)
         {
-            digitalWrite(POWER_BUTTON_PIN, LOW);
+            digitalWrite(LOCK_BUTTON_PIN, LOW);
             Serial.println("Blocked");
         }
     }
@@ -512,6 +562,3 @@ void CheckMotorProcess()
         SwitchOff();
     }
 }
-
-// Прошу пробачення за ненайкращий вигляд цього коду, але без належної оплати за мій труд я код покращувати не буду.
-// P.S. Вся моя робота відповідає всім вимогам замовника і навіть більше, я і так зробив набагато більше ніж мав зробити.

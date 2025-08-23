@@ -12,7 +12,7 @@ const int buttonPins[] = {
     BUTTON_PIN_1,       // command 1
     BUTTON_PIN_2,       // command 2
     BUTTON_PIN_3,       // command 3
-    BUTTON_START_PIN_4, // command 4
+    POWER_BUTTON_PIN_4, // command 4
     BUTTON_PIN_5,       // command 5
     BUTTON_PIN_6,       // command 6
     BUTTON_PIN_7        // command 7
@@ -52,10 +52,10 @@ void updateButtonMode(int buttonIndex)
   case 6: // Button 7
     buttonModes[buttonIndex] = (buttonModes[buttonIndex] % 3) + 1;
     break;
-  case 1:                                      // Button 2
-    buttonModes[1] = (buttonModes[1] % 3) + 1; // Цикли між 1,2,3
-    buttonModes[4] = 0;                        // Reset Button 5
-    buttonModes[5] = 0;                        // Reset Button 6
+  case 1: // Button 2
+    buttonModes[1] = (buttonModes[1] % 3) + 1;
+    buttonModes[4] = 0;
+    buttonModes[5] = 0;
     break;
   case 4: // Button 5
     if (buttonModes[4] == 0)
@@ -142,7 +142,7 @@ void activateButton(int pin, int buttonIndex)
   {
     printStatus("Button on GPIO " + String(pin) + " activated (HIGH)");
   }
-  delay(100); // Залишено 100 мс
+  delay(100);
   digitalWrite(pin, LOW);
   if (deviceOn)
   {

@@ -1,4 +1,3 @@
-// #include <SPIFFS.h>
 #include "myWebServer.h"
 #include "ota_ap.h"
 
@@ -59,7 +58,7 @@ const char *server_html =
     "<script src='/javascript'></script>"
     "<script>"
     "$(document).ready(function() {"
-    "$('form').on('submit', function(event) {"
+    "$('#upload_form').on('submit', function(event) {"
     "event.preventDefault();"
     "let formData = new FormData(this);"
     "$.ajax({"
@@ -128,15 +127,24 @@ void handleIn(AsyncWebServerRequest *request)
                   "<meta http-equiv=\"Refresh\" content=\"1\" /> \r\n"
                   "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\" />\r\n"
                   "<body> \r\n" +
-                  String(millis()) + "<br><br>" + " \"needPress\": " + String(needPress) + "<br>, \r\n" + " \"millis()\": " + String(millis()) + "<br>, \r\n" + " \"IsMotorRun()\": " + String(IsMotorRun()) + "<br>, \r\n" + " \"run_permit\": " + String(run_permit) + "<br>, \r\n" + " \"lastCycle\": " + String(lastCycle) + "<br>, \r\n" + " \"maxCycle\": " + String(maxCycle) + "<br>, \r\n" + " \"bootCount\": " + String(bootCount) + "<br>, \r\n" + " \"temp\": " + String(temperatureRead()) + "<br>°C, \r\n" + " \"MHz\": " + String(getCpuFrequencyMhz()) + "<br>, \r\n"
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         "</body> \r\n</html> \r\n";
+                  String(millis()) + "<br><br>" +
+                  " \"needPress\": " + String(needPress) + "<br>, \r\n" +
+                  " \"millis()\": " + String(millis()) + "<br>, \r\n" +
+                  " \"IsMotorRun()\": " + String(IsMotorRun()) + "<br>, \r\n" +
+                  " \"run_permit\": " + String(run_permit) + "<br>, \r\n" +
+                  " \"lastCycle\": " + String(lastCycle) + "<br>, \r\n" +
+                  " \"maxCycle\": " + String(maxCycle) + "<br>, \r\n" +
+                  " \"bootCount\": " + String(bootCount) + "<br>, \r\n" +
+                  " \"temp\": " + String(myTemperatureRead()) + "<br>°C, \r\n" +
+                  " \"MHz\": " + String(getCpuFrequencyMhz()) + "<br>, \r\n"
+                                                                "</body> \r\n</html> \r\n";
     request->send(200, "text/html; charset=utf-8", temp);
 }
 
 void handleOn(AsyncWebServerRequest *request)
 {
-    String result = " \"digitalRead\": " + String(digitalRead(POWER_BUTTON_PIN)) + ", \r\n";
-    digitalWrite(POWER_BUTTON_PIN, !digitalRead(POWER_BUTTON_PIN));
+    String result = " \"digitalRead\": " + String(digitalRead(LOCK_BUTTON_PIN)) + ", \r\n";
+    digitalWrite(LOCK_BUTTON_PIN, !digitalRead(LOCK_BUTTON_PIN));
     request->send(200, "text/html; charset=utf-8", result);
 }
 
@@ -170,9 +178,9 @@ void handle3(AsyncWebServerRequest *request)
 void handle4(AsyncWebServerRequest *request)
 {
     String result = "4 \r\n";
-    digitalWrite(BUTTON_START_PIN_4, HIGH);
+    digitalWrite(POWER_BUTTON_PIN_4, HIGH);
     delay(300);
-    digitalWrite(BUTTON_START_PIN_4, LOW);
+    digitalWrite(POWER_BUTTON_PIN_4, LOW);
     request->send(200, "text/html; charset=utf-8", result);
 }
 
@@ -206,9 +214,9 @@ void handle7(AsyncWebServerRequest *request)
 void handle8(AsyncWebServerRequest *request)
 {
     String result = "8 \r\n";
-    digitalWrite(POWER_BUTTON_PIN, HIGH);
+    digitalWrite(LOCK_BUTTON_PIN, HIGH);
     delay(300);
-    digitalWrite(POWER_BUTTON_PIN, LOW);
+    digitalWrite(LOCK_BUTTON_PIN, LOW);
     request->send(200, "text/html; charset=utf-8", result);
 }
 
@@ -224,38 +232,41 @@ void WebServerSetup()
     WiFi.disconnect(true);
     WiFi.softAPdisconnect(true);
     delay(100);
-    WiFi.setHostname("RestNowww");
+    WiFi.setHostname("RestNow");
     WiFi.mode(WIFI_AP_STA);
-    WiFi.begin("Pytin-Xyilo", "BestCode123");
+    WiFi.begin("Wi-Fi", "12344321");
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - start < 10000)
     {
         delay(100);
     }
     if (WiFi.status() == WL_CONNECTED)
+    {
         Serial.println("Connected! IP: " + WiFi.localIP().toString());
+    }
     else
+    {
         Serial.println("WiFi failed, using AP mode");
-    WiFi.softAP("RestNoWWW", "12344321");
+        WiFi.setAutoReconnect(false);
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_AP);
+    }
+    WiFi.softAP("RestNoW", "12344321");
     WiFi.softAPConfig(ap_ip, ap_ip, ap_mask);
     Serial.println("AP mode, IP: " + WiFi.softAPIP().toString());
-    // if (!SPIFFS.begin(true))
-    // {
-    //     Serial.println("SPIFFS failed");
-    //     return;
-    // }
-    // Serial.println("SPIFFS OK");
-    // if (!SPIFFS.exists("/index.html"))
-    //     Serial.println("index.html not found");
     server.onNotFound(handleNotFound);
     server.on("/generate_204", HTTP_GET, handleGoogle);
     server.on("/javascript", HTTP_GET, onJavaScript);
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send(200, "text/html", login_html); });
+              {
+                  Serial.println("Serving / from login_html");
+                  request->send(200, "text/html; charset=utf-8", login_html); });
     server.on("/index.html", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send(200, "text/html", login_html); });
+              {
+                  Serial.println("Serving /index.html from login_html");
+                  request->send(200, "text/html; charset=utf-8", login_html); });
     server.on("/serverIndex", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send(200, "text/html", server_html); });
+              { request->send(200, "text/html; charset=utf-8", server_html); });
     server.on("/in", HTTP_GET, handleIn);
     server.on("/on", HTTP_GET, handleOn);
     server.on("/1", HTTP_GET, handle1);
@@ -269,12 +280,24 @@ void WebServerSetup()
     server.on("/restart", HTTP_GET, handleRestart);
     server.on("/update", HTTP_POST, [](AsyncWebServerRequest *request)
               {
-        request->send(200, "text/plain", Update.hasError() ? "FAIL" : "OK");
-        if (!Update.hasError()) ESP.restart(); }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final)
+                  request->send(200, "text/plain", Update.hasError() ? "FAIL" : "OK");
+                  if (!Update.hasError())
+                      ESP.restart(); }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final)
               {
-        if (!index) { Serial.printf("Update Start: %s\n", filename.c_str()); Update.begin(UPDATE_SIZE_UNKNOWN); }
-        if (Update.write(data, len) != len) Update.printError(Serial);
-        if (final) { if (Update.end(true)) Serial.printf("Update Success: %u\n", index + len); else Update.printError(Serial); } });
+                  if (!index)
+                  {
+                      Serial.printf("Update Start: %s\n", filename.c_str());
+                      Update.begin(UPDATE_SIZE_UNKNOWN);
+                  }
+                  if (Update.write(data, len) != len)
+                      Update.printError(Serial);
+                  if (final)
+                  {
+                      if (Update.end(true))
+                          Serial.printf("Update Success: %u\n", index + len);
+                      else
+                          Update.printError(Serial);
+                  } });
     server.begin();
     dnsServer.setTTL(300);
     dnsServer.setErrorReplyCode(DNSReplyCode::ServerFailure);
@@ -285,13 +308,15 @@ void WebServerSetup()
 // {
 //     WiFi.disconnect(true);
 //     WiFi.mode(WIFI_OFF);
-//     Serial.println("Wi-Fi відключено.");
+//     Serial.println("Wi-Fi OFF.");
 // }
 
 void WebServerRun() {}
+
+// void WebServerLoop() {}
 void WebServerLoop()
 {
-    if ((WiFi.status() != WL_CONNECTED) && (millis() > 30000) && (WiFi.softAPgetStationNum() == 0))
+    if ((WiFi.status() != WL_CONNECTED) && (millis() > 40000) && (WiFi.softAPgetStationNum() == 0))
     {
         WiFi.disconnect();
         WiFi.mode(WIFI_OFF);
@@ -301,5 +326,3 @@ void WebServerLoop()
         dnsServer.processNextRequest();
     }
 }
-
-// void WebServerLoop() {}

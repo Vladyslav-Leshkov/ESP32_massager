@@ -4,24 +4,24 @@
 #include "ota_ap.h"
 
 // Changeable UUID for QR Code
-static const String serviceUUID = "3aa82ff0-300d-49ed-8b59-b9a674f843f3"; // "9ba06fee-3aec-4deb-882e-1888fc26ecc4"; // "3ea3d02c-fe45-423a-a09f-43895c7c7c5b"; // "6bc58753-dc17-4c09-9658-68442283ff48";
+static const String serviceUUID = "3aa82ff0-300d-49ed-8b59-b9a674f843f3";
 
 #define SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"     // const
 #define COMMAND_UUID "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"     // const
 #define MOTOR_STATE_UUID "6E400003-B5A3-F393-E0A9-E50E24DCCA9E" // const
 
 // #define BoardLedPin 2
-#define MotorControlPin 36
-#define PowerRelayPin 15
+// #define PowerRelayPin 15
 
-#define POWER_BUTTON_PIN 23
+#define LOCK_BUTTON_PIN 23
 #define BUTTON_PIN_1 27
 #define BUTTON_PIN_2 32
 #define BUTTON_PIN_3 33
-#define BUTTON_START_PIN_4 25
+#define POWER_BUTTON_PIN_4 25 // ON/OFF
 #define BUTTON_PIN_5 26
 #define BUTTON_PIN_6 13
 #define BUTTON_PIN_7 14
+#define MotorControlPin 36 // Voltage Control
 
 uint8_t IsMotorRun();
 

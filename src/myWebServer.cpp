@@ -1,11 +1,14 @@
 #include "myWebServer.h"
 #include "ota_ap.h"
+#include "config.h"
 
 // WiFi AP configuration
 IPAddress ap_ip(192, 168, 4, 1);
 IPAddress ap_mask(255, 255, 255, 0);
 AsyncWebServer server(80);
 DNSServer dnsServer;
+
+unsigned long ap_start_time = 0;
 
 // HTML for login page
 const char *login_html =
@@ -234,9 +237,9 @@ void WebServerSetup()
     delay(100);
     WiFi.setHostname("RestNow");
     WiFi.mode(WIFI_AP_STA);
-    WiFi.begin("Wi-Fi", "12344321");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD); // Use Wi-Fi credentials from config.h
     unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start < 10000)
+    while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_CONNECT_TIMEOUT)
     {
         delay(100);
     }
@@ -250,10 +253,10 @@ void WebServerSetup()
         WiFi.setAutoReconnect(false);
         WiFi.disconnect(true);
         WiFi.mode(WIFI_AP);
+        WiFi.softAP(AP_SSID, AP_PASSWORD); // Use AP credentials from config.h
+        WiFi.softAPConfig(ap_ip, ap_ip, ap_mask);
+        Serial.println("AP mode, IP: " + WiFi.softAPIP().toString());
     }
-    WiFi.softAP("RestNoW", "12344321");
-    WiFi.softAPConfig(ap_ip, ap_ip, ap_mask);
-    Serial.println("AP mode, IP: " + WiFi.softAPIP().toString());
     server.onNotFound(handleNotFound);
     server.on("/generate_204", HTTP_GET, handleGoogle);
     server.on("/javascript", HTTP_GET, onJavaScript);
@@ -313,15 +316,37 @@ void WebServerSetup()
 
 void WebServerRun() {}
 
+extern unsigned long ap_start_time;
+static bool wifi_disabled = false;
+
 // void WebServerLoop() {}
 void WebServerLoop()
 {
-    if ((WiFi.status() != WL_CONNECTED) && (millis() > 40000) && (WiFi.softAPgetStationNum() == 0))
+    if (wifi_disabled)
+        return;
+
+    if (IsMotorRun())
     {
-        WiFi.disconnect();
+        // Disable Wi-Fi if motor is running
+        WiFi.disconnect(true);
+        WiFi.softAPdisconnect(true);
         WiFi.mode(WIFI_OFF);
+        wifi_disabled = true;
+        Serial.println("Wi-Fi disabled due to motor running");
+        return;
     }
-    if ((WiFi.status() == WL_CONNECTED) || (WiFi.softAPgetStationNum() > 0))
+
+    if (WiFi.status() != WL_CONNECTED && WiFi.softAPgetStationNum() == 0)
+    {
+        if (WiFi.getMode() == WIFI_AP && millis() - ap_start_time > WIFI_AP_TIMEOUT)
+        {
+            WiFi.softAPdisconnect(true);
+            WiFi.mode(WIFI_OFF);
+            wifi_disabled = true;
+            Serial.println("Wi-Fi AP disabled after timeout");
+        }
+    }
+    else
     {
         dnsServer.processNextRequest();
     }

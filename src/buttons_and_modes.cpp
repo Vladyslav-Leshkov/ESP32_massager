@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include "buttons_and_modes.h"
-#include "global.h"
+#include "config.h"
 #include <BLEDevice.h>
 
 // BLE characteristic for voltage notifications
@@ -42,7 +42,7 @@ void printStatus(String status)
 
 void updateButtonMode(int buttonIndex)
 {
-  if (!deviceOn && buttonIndex != 3) // Ігноруємо натискання кнопок (крім 4) у Device SLEEP
+  if (!deviceOn && buttonIndex != 3) // Ignore button presses (except 4) in Device SLEEP mode
     return;
 
   switch (buttonIndex)

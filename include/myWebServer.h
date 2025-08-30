@@ -9,13 +9,22 @@
 #include <WiFi.h>
 #include <DNSServer.h>
 #include <Update.h>
-#include "global.h"
+#include "config.h"
 
 // WiFi AP configuration
 extern IPAddress ap_ip;
 extern IPAddress ap_mask;
 extern AsyncWebServer server;
 extern DNSServer dnsServer;
+
+// For Web-Server
+extern unsigned long needPress;
+extern bool run_permit;
+extern unsigned long lastCycle;
+extern unsigned long maxCycle;
+extern long bootCount;
+extern bool needRestart;
+extern float myTemperatureRead();
 
 // HTML constants
 extern const char *login_html;
@@ -40,5 +49,6 @@ void handleRestart(AsyncWebServerRequest *request);
 void WebServerSetup();
 void WebServerRun();
 void WebServerLoop();
+uint8_t IsMotorRun();
 
 #endif

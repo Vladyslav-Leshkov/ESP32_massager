@@ -7,7 +7,7 @@
 #include <soc/rtc.h>
 #include <esp_system.h>
 #include <rom/ets_sys.h>
-#include "global.h"
+#include "config.h"
 #include "myWebServer.h"
 #include "ota_ap.h"
 #include "buttons_and_modes.h"
@@ -21,8 +21,7 @@ void SwitchOff();
 void CheckMotorProcess();
 void PressButton(int pin, int duration_ms);
 
-BLECharacteristic *
-    command_charc;
+BLECharacteristic *command_charc;
 BLECharacteristic *motor_state_charc;
 
 BLEServer *ble_server;
@@ -41,22 +40,24 @@ unsigned long max_pause_time = 60000;
 unsigned long start_pause_time = 0;
 int eeprom_addres = 0;
 
-float current_mA = 0.0;
+// float current_mA = 0.0;  // Not used, can be deleted
 
-unsigned long lastSecond = 0; // Не використовується, можна видалити
+// unsigned long lastSecond = 0;  // Not used, can be deleted
 unsigned long lastMillisecond = 0;
 unsigned long lastMillisec = 0;
 unsigned long lastMillis = 0;
 unsigned long maxCycle = 0;
 unsigned long lastCycle = 0;
 unsigned long cycle = 0;
-unsigned long mA = 0;
-unsigned long mAmA = 0;
+// unsigned long mA = 0;  // Not used, can be deleted
+// unsigned long mAmA = 0;  // Not used, can be deleted
 unsigned long needPress = 0;
 
 long a1 = 0;
 long b1 = 0;
 bool needRestart = false;
+
+extern unsigned long ap_start_time; // Declare external variable from myWebServer.h
 
 float myTemperatureRead()
 {
@@ -109,6 +110,7 @@ int getButtonPin(int btn_id)
     }
     return -1; // Incorrect btn_id
 }
+
 class RestProcessCallbacks : public BLECharacteristicCallbacks
 {
     void onWrite(BLECharacteristic *charc)
@@ -260,7 +262,16 @@ class RestProcessCallbacks : public BLECharacteristicCallbacks
             {
                 if (delimiter_index != -1 && last_delimiter != -1 && last_delimiter > delimiter_index)
                 {
-                    int btn_id = message.substring(last_delimiter + 1).toInt();
+                    String btn_id_str = message.substring(last_delimiter + 1);
+                    if (btn_id_str.toInt() == 0 && btn_id_str != "0")
+                    {
+                        command_charc->setValue("1");
+                        command_charc->notify();
+                        Serial.println("[BLE] Sent to client: 1 (COMMAND invalid btn_id format)");
+                        command = "";
+                        return;
+                    }
+                    int btn_id = btn_id_str.toInt();
                     int pin = getButtonPin(btn_id);
 
                     if (pin != -1 && run_permit && IsMotorRun() == 1)
@@ -315,7 +326,7 @@ void GPIO_Init()
     // pinMode(BoardLedPin, OUTPUT);
     // pinMode(PowerRelayPin, OUTPUT);
     // digitalWrite(PowerRelayPin, HIGH);
-    pinMode(MotorControlPin, INPUT);
+    pinMode(MOTOR_CONTROL_PIN, INPUT);
     pinMode(LOCK_BUTTON_PIN, OUTPUT);
     digitalWrite(LOCK_BUTTON_PIN, LOW);
     pinMode(BUTTON_PIN_1, OUTPUT);
@@ -344,7 +355,7 @@ void BLE_Init()
     // create service
     BLEService *service = ble_server->createService(SERVICE_UUID);
     // create command characteristic
-    command_charc = service->createCharacteristic(COMMAND_UUID, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
+    command_charc = service->createCharacteristic(COMMAND_UUID, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
     command_charc->setCallbacks(new RestProcessCallbacks());
     // create motor_state characteristic
     motor_state_charc = service->createCharacteristic(MOTOR_STATE_UUID, BLECharacteristic::PROPERTY_NOTIFY);
@@ -355,7 +366,7 @@ void BLE_Init()
     BLEAdvertising *advertising = BLEDevice::getAdvertising();
     // advertising->addServiceUUID(ADVERTISING_UUID);
     // BLEUUID bleUUID(serviceUUID);       // Convert String to BLEUUID
-    // BLEUUID bleUUID(serviceUUID.c_str());
+    // BLEUUID bleUUID(SERVICE_UUID);
     BLEUUID bleUUID(serviceUUID.c_str());
     advertising->addServiceUUID(bleUUID);
     advertising->setMinPreferred(0x12);
@@ -371,7 +382,7 @@ uint8_t IsMotorRun()
 
     for (int i = 0; i < 50; i++)
     {
-        sum += analogRead(MotorControlPin);
+        sum += analogRead(MOTOR_CONTROL_PIN);
         delay(1);
     }
     float voltage = (sum / 50.0) * (3.3 / 4095.0);
@@ -383,7 +394,7 @@ uint8_t IsMotorRun()
         lastVoltageCheck = millis();
     }
 
-    bool newDeviceOn = (voltage >= 0.09 && voltage <= 1.84); // <= 1.85
+    bool newDeviceOn = (voltage >= 0.09 && voltage <= 1.89); // Massage is ON
     if (newDeviceOn != deviceOn)
     {
         buttonModes[3] = newDeviceOn;
@@ -418,8 +429,9 @@ void setup()
     attachInterrupt(1, isr1, CHANGE);
     GPIO_Init();
     BLE_Init();
-    EEPROM.begin(64);
+    EEPROM.begin(EEPROM_SIZE);
     WebServerSetup();
+    ap_start_time = millis(); // Initialize AP start time
 
     uint32_t *rtc_mem = (uint32_t *)(0x50000000);
     bootCount = *rtc_mem;

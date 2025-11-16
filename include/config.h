@@ -4,7 +4,7 @@
 #include "ota_ap.h"
 
 // Changeable UUID for QR Code
-static const String serviceUUID = "71f5f50c-5d89-4442-9cc8-800b2c7da72c"; //"3aa82ff0-300d-49ed-8b59-b9a674f843f3";
+static const String serviceUUID = "71f5f50c-5d89-4442-9cc8-800b2c7da72c";
 
 #define SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"     // const
 #define COMMAND_UUID "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"     // const
@@ -12,7 +12,7 @@ static const String serviceUUID = "71f5f50c-5d89-4442-9cc8-800b2c7da72c"; //"3aa
 
 // Wi-Fi Network Credentials (Ваша Wi-Fi мережа до якої підключається ESP32)
 #define WIFI_SSID "YourWiFiNetwork"
-#define WIFI_PASSWORD "YourWiFiPassword"
+#define WIFI_PASSWORD "12344321"
 
 // Wi-Fi Access Point (Точка доступу яку створює ESP32, якщо не вдається підключитися до мережі)
 #define AP_SSID "RestNow"

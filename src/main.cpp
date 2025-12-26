@@ -262,7 +262,8 @@ class RestProcessCallbacks : public BLECharacteristicCallbacks
             {
                 if (delimiter_index != -1 && last_delimiter != -1 && last_delimiter > delimiter_index)
                 {
-                    String btn_id_str = message.substring(last_delimiter + 1);
+                    String btn_id_str = message.substring(delimiter_index + 1, last_delimiter);
+                    btn_id_str.trim();
                     if (btn_id_str.toInt() == 0 && btn_id_str != "0")
                     {
                         command_charc->setValue("1");

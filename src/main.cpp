@@ -283,18 +283,8 @@ class RestProcessCallbacks : public BLECharacteristicCallbacks
                     }
                     else
                     {
-                        if (run_permit && IsMotorRun())
-                        {
-                            Serial.println("Pressing START button to stop motor...");
-                            PressButton(POWER_BUTTON_PIN_4, 100);
-                            delay(100);
-                            Serial.println("Sending POWER OFF...");
-                            digitalWrite(LOCK_BUTTON_PIN, LOW);
-                        }
-                        run_permit = false;
-                        session_id = 0;
                         command_charc->setValue("1");
-                        Serial.println("[BLE] Sent to client: 1 (COMMAND failed: invalid btn_id or conditions not met)");
+                        Serial.println("[BLE] Sent to client: 1 (COMMAND invalid btn_id or conditions not met)");
                     }
                     command_charc->notify();
                 }
